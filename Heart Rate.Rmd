@@ -1,0 +1,161 @@
+---
+title: "Heart Rate"
+author: "Hanh Nguyen"
+date: "12/23/2018"
+output: 
+  html_document:
+    df_print: kable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(knitr)
+library(ggplot2)
+library(gridExtra)
+heart_disease <- read_csv("https://raw.githubusercontent.com/hanhnguyen1990/Heart_rate/master/heart_disease_patients.csv")
+```
+
+## HEART RATE
+
+This is the preview of our dataset. 
+There are `r ncol(heart_disease)` variables and `r nrow(heart_disease)` observations in the dataset.
+```{r}
+heart_disease %>%
+  head(5)
+```
+
+### BUSINESS PROBLEM
+Clustering patients with heart rate problems based on 11 different variables (not including ID).
+
+### DATA UNDERSTANDING AND DATA PREPARATION
+
+Check if there are any null values in the datasets. There is no null data. 
+```{r}
+kable(t(sapply(heart_disease, function(x) sum(is.na (x)))))
+```
+
+Next step is to scale the data. 
+```{r}
+heart_disease <- heart_disease[ , !(names(heart_disease) %in% c('id'))]
+scaled <- scale(heart_disease, scale = TRUE)
+```
+
+```{r}
+scaled %>%
+  head(5) %>%
+knitr::kable()
+```
+
+Checklist: 
+
+* Rows are observations (individuals) and columns are variables --> Checked.
+* Any missing value in the data must be removed or estimated --> No null values.
+* The data must be standardized (i.e., scaled) to make variables comparable. Recall that, standardization consists of transforming the variables such that they have mean zero and standard deviation one --> Checked. 
+
+
+###ANALYSIS AND MODELING
+
+
+#### K-means Clustering model
+
+Because this method is sensitive to initial points that are selected, I will run it multiple iterations. For the k-means algorithm, it is imperative that similar clusters are produced for each iteration of the algorithm. We want to make sure that the algorithm is clustering signal as opposed to noise.
+
+Conclusion: K-Means clustering is not a right choice for this data because cluster results are not stable. 
+
+**Round 1**
+
+```{r}
+seed_val <- 10
+set.seed(seed_val)
+k <- 5
+first_clust <- kmeans(scaled, centers = k, nstart =1 )
+first_result <- first_clust$size
+kable(t(data.frame(first_result, row.names = c('cluster 1', 'cluster 2', 'cluster 3','cluster 4', 'cluster 5'))))
+```
+
+**Round 2**
+
+```{r}
+seed_val <- 38
+set.seed(seed_val)
+k <- 5
+second_clust <- kmeans(scaled, centers = k, nstart =1 )
+second_result <- second_clust$size
+kable(t(data.frame(second_result, row.names = c('cluster 1', 'cluster 2', 'cluster 3', 'cluster 4', 'cluster 5'))))
+```
+
+**Round 3**
+```{r}
+seed_val <- 50
+set.seed(seed_val)
+k <- 5
+third_clust <- kmeans(scaled, centers = k, nstart =1 )
+third_result <- third_clust$size
+kable(t(data.frame(third_result, row.names = c('cluster 1', 'cluster 2', 'cluster 3', 'cluster 4', 'cluster 5'))))
+```
+
+#### K-means Clustering visualization
+
+Conclusion: The K-means clustering results are not stable, as shown by the plots. 
+
+```{r}
+heart_disease$first_clust <- first_clust$cluster
+heart_disease$second_clust <- second_clust$cluster
+heart_disease$third_clust <- third_clust$cluster
+
+plot_one <- ggplot(heart_disease, aes(x = age, y = chol, color = as.factor(first_clust)))+ geom_point()
+plot_two <- ggplot(heart_disease, aes(x = age, y = chol, color = as.factor(second_clust))) + geom_point()
+plot_three <- ggplot (heart_disease, aes(x = age, y = chol, color = as.factor(third_clust))) + geom_point()
+
+grid.arrange(plot_one, plot_two, plot_three)
+```
+
+#### Hierarchical Clustering model
+
+An alternative to k-means clustering is hierarchical clustering. This method works well when the data has a nested structure. It is possible that the data from heart disease patients follows this type of structure. For example, if men are more likely to exhibit certain characteristics, those characteristics might be nested inside the gender variable.
+
+Conclusion: Hierarchical clustering with complete method is the right choice for this data. 
+
+**Round 1, Linkage Criteria = Complete**
+```{r}
+hier_clust_1 <- hclust(dist(scaled), method= "complete")
+hc_1_assign <- cutree(hier_clust_1, 5)
+```
+
+**Round 2, Linkage Criteria = Single**
+```{r}
+hier_clust_2 <- hclust(dist(scaled), method = "single")
+hc_2_assign <- cutree(hier_clust_2, 5)
+```
+
+**Round 3, Linkage Criteria = Average**
+```{r}
+hier_clust_3 <- hclust(dist(scaled), method = "average")
+hc_3_assign <- cutree(hier_clust_3,5)
+```
+
+#### Hierachical Clustering visualization
+
+Conclusion: Linkage Complete produces the most balanced dendrogram. 
+
+The doctors are interested in grouping similar patients together in order to determine appropriate treatments. Therefore, they want to have clusters with more than a few patients to see different treatment options. While it is possible for a patient to be in a cluster by themselves, this means that the treatment they received might not be recommended for someone else in the group.
+
+The complete linkage therefore is the best choice. 
+
+```{r}
+par(mfrow = c(1,3))
+plot(hier_clust_1, main = 'Complete Linkage')
+plot(hier_clust_2, main = 'Single Linkage')
+plot(hier_clust_3, main = 'Average Linkage')
+```
+
+
+###CONCLUSION AND VALIDATION###
+
+```{r}
+heart_disease_complete <- mutate(heart_disease, cluster = hc_1_assign)
+kable(count(heart_disease_complete, cluster))
+plot_complete <- ggplot(heart_disease_complete, aes(x = age, y = chol, color = factor(cluster))) + geom_point()
+plot_complete
+```
